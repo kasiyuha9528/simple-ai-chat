@@ -1,36 +1,108 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# シンプルAIチャットUI(AIチャット/Bot 案件No.07)
 
-## Getting Started
+Claude APIに質問を送り、返答を1文字ずつ流れるように表示する、社内向けのシンプルなAIチャットです。
 
-First, run the development server:
+## 1. プロジェクトの概要
+
+### 目的
+
+APIキーを設定するだけで使える、AIチャットのMVP(最小限の製品)を作ります。AIチャットの導入では「まず会話だけできるUIがほしい」という依頼が多いため、その土台になる構成を目指しました。
+
+### 想定ユーザー
+
+社内の業務担当者(非エンジニア)です。
+
+### 主な機能
+
+- 質問を送ると、Claudeの返答がストリーミングで逐次表示される
+- 同じ画面にいる間は、会話の履歴を踏まえて返答する
+- Enterで送信、Shift+Enterで改行(日本語の変換確定のEnterでは送信しない)
+- 応答中は送信ボタンを無効化し、停止ボタンで生成を止められる
+- 送る履歴は直近10往復までとし、超えたら注意表示と「新しい会話」ボタンを出す
+- 入力は2,000文字まで、返答は1,024トークンまで
+- エラーは原因別に、利用者が次に何をすればよいか分かる文言で表示する
+- Basic認証でアクセスを制限し、Anthropic Consoleで月の利用上限額を設定する
+
+### 開発のステップ
+
+| Step | 内容 |
+| --- | --- |
+| 1 | 雛形作成、README・学習ノート、環境変数の準備 |
+| 2 | API Route作成、疎通確認 |
+| 3 | チャットUI、ストリーミング表示 |
+| 4 | 入力欄(Enter送信・IME対策)、停止ボタン |
+| 5 | システムプロンプト、トークン上限、エラー表示 |
+| 6 | 不正利用対策(利用上限額、Basic認証) |
+| 7 | 検証、GitHub公開、Vercelデプロイ |
+
+## 2. 使用技術
+
+| 分類 | 技術 |
+| --- | --- |
+| フレームワーク | Next.js 16(App Router) |
+| 言語 | TypeScript |
+| スタイル | Tailwind CSS |
+| AI | Claude API、Vercel AI SDK(`ai` 7、`@ai-sdk/react` 4、`@ai-sdk/anthropic` 4) |
+| デプロイ | Vercel |
+
+## 3. 全体のフロー
+
+(Step7で記載します)
+
+## 4. 学んだ事
+
+(Step7で、learning-notes.md の内容を要約して記載します。詳細は [docs/learning-notes.md](docs/learning-notes.md) を参照してください。)
+
+## 5. こだわった点
+
+(実装後に記載します)
+
+## 6. 改善点
+
+今回は入れず、発展版として検討しているものです。
+
+| 機能 | 内容 |
+| --- | --- |
+| ログイン機能 | 社員ごとのアカウントで利用する(今回はID・パスワードを共有するBasic認証) |
+| 会話履歴の保存 | リロード後も残し、過去の会話を一覧から選べるようにする |
+| 利用回数の制限 | 1人あたりの利用回数を制限し、利用量を記録する |
+| ファイル・画像の添付 | 資料や画像を添えて質問できるようにする |
+| モデルの切り替え | 用途に応じてモデルを選べるようにする |
+| ダークモード | 暗い配色に切り替えられるようにする |
+
+## 7. 検証結果
+
+(Step7で記載します)
+
+## 8. セットアップ
+
+### 必要なもの
+
+- Node.js
+- Anthropic APIキー(Anthropic Consoleで発行)
+
+### 手順
+
+```bash
+git clone https://github.com/kasiyuha9528/simple-ai-chat.git
+cd simple-ai-chat
+npm install
+```
+
+`.env.example` をコピーして `.env.local` を作り、値を入力します。
+
+| 環境変数 | 内容 |
+| --- | --- |
+| `ANTHROPIC_API_KEY` | Anthropic APIキー |
+| `BASIC_AUTH_USER` | Basic認証のユーザー名 |
+| `BASIC_AUTH_PASSWORD` | Basic認証のパスワード |
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`http://localhost:3000` を開いて動作を確認します。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 9. ライセンス
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+MIT License。詳細は [LICENSE](LICENSE) を参照してください。
