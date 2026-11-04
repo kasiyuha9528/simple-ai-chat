@@ -2,6 +2,7 @@ import { anthropic } from "@ai-sdk/anthropic";
 import {
   convertToModelMessages,
   createUIMessageStreamResponse,
+  smoothStream,
   streamText,
   toUIMessageStream,
   type UIMessage,
@@ -16,6 +17,10 @@ export async function POST(req: Request) {
     model: anthropic("claude-haiku-5-5"),
     instructions: "あなたは親切な日本語のアシスタントです。",
     messages: await convertToModelMessages(messages),
+    experimental_transform: smoothStream({
+      delayInMs: 10,
+      chunking: /[\s\S]/u,
+    }),
   });
 
   return createUIMessageStreamResponse({

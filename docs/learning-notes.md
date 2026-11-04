@@ -76,6 +76,36 @@
 - 原因:`test.json` を `C:\Users\User` ではなく `C:\Users\User\test` フォルダの中に作っていた
 - 解決:`dir` でファイルの場所を確認し、今いるフォルダのファイルを指す `@test.json` で実行した
 
+## Step 3 チャットUI、ストリーミング表示
+
+### やったこと
+
+- `app/components/Chat.tsx` を作成し、`useChat` で会話の履歴を管理して、吹き出しで表示するようにした
+- `app/page.tsx` から `Chat` を表示するようにした
+- `route.ts` に `smoothStream` を追加し、返答を1文字ずつ流れるように表示した
+- 次の4点を確認し、すべて問題なかった
+  - 返答が1文字ずつ流れる
+  - 前の発言を踏まえて答える(会話履歴の保持)
+  - 返答が長くなっても、画面が一番下に追従する
+  - 返答中は送信ボタンが押せない
+
+### 学んだこと
+
+- 入力欄の中身は `useChat` ではなく、自分で `useState` に持つ(v5以降の書き方)。送信は `sendMessage({ text })` で行う
+- `useChat` の `status` は `submitted`(返答待ち)→ `streaming`(返答が届いている)→ `ready`(完了)と変わる。送信ボタンの無効化や「考え中…」の表示に使える
+- メッセージの文章は `message.parts` の中の、`type === "text"` の部品の `text` に入っている
+- ブラウザ側で動くファイルには、先頭に `"use client"` が必要。入力欄の状態やスクロールなど、画面の動きを扱うため
+- 一覧の各要素には、区別するための `key` を付ける。ここでは `message.id` を使った
+- `useRef` で画面上の1か所(一番下の目印)を指し、`useEffect` で `messages` が変わるたびにそこまでスクロールする
+- フォームの送信では、`e.preventDefault()` でページの再読み込みを止める
+- `smoothStream` は、届いた返答のかけらを決まった間隔で細かく分けて流し直す。`chunking` に正規表現 `/[\s\S]/u` を指定すると、1文字ずつになる。日本語は、初期設定の単語単位ではうまく分けられない
+- `delayInMs` を大きくするほどゆっくり流れるが、長い返答の表示が遅れる
+- OSがダークモードでも読みにくくならないよう、画面全体に `bg-white text-gray-900` を付けて配色を固定した
+
+### つまずいた点と解決方法
+
+特になし。
+
 ## 振り返り
 
 (最後のステップで記入します)
@@ -98,6 +128,15 @@
 | `instructions` | AIの役割や口調を決める指示(システムプロンプト)。v6までの `system` に当たる |
 | `convertToModelMessages` | 画面用のメッセージ形式を、Claudeに送る形式に変換する。v7では `await` を付ける |
 | `createUIMessageStreamResponse` / `toUIMessageStream` | 返答を、画面側の `useChat` が読めるストリームにして返す |
+| `"use client"` | このファイルはブラウザ側で動くと宣言する。画面の動き(状態やスクロール)を扱うファイルに必要 |
+| `useChat` | 会話の履歴(`messages`)、送信(`sendMessage`)、状態(`status`)を管理する(`@ai-sdk/react`) |
+| `status` | `submitted` → `streaming` → `ready` と変わる、通信の状態 |
+| `message.parts` | 1つのメッセージを部品の配列で持つ。文章は `type === "text"` の部品に入っている |
+| `useState` | 画面の状態(入力欄の中身など)を持つ。値が変わると画面が更新される |
+| `useRef` | 画面上の要素を指し示す。ここでは「一番下の目印」に使った |
+| `useEffect` | 指定した値が変わったときに、決まった処理を実行する。ここでは自動スクロールに使った |
+| `e.preventDefault()` | ブラウザ標準の動き(フォーム送信での再読み込みなど)を止める |
+| `smoothStream` | 返答のかけらを細かく分けて、決まった間隔で流し直す(`ai`) |
 | `npx tsc --noEmit` | ファイルを出力せず、TypeScriptの型だけを検査する |
 | `curl.exe -N` | 本物のcurlを使い、`-N` で届いた順に出力する(PowerShellの `curl` は別機能のため `.exe` を付ける) |
 
