@@ -1,5 +1,8 @@
 import { anthropic } from "@ai-sdk/anthropic";
 import {
+  APICallError,
+  LoadAPIKeyError,
+  RetryError,
   convertToModelMessages,
   createUIMessageStreamResponse,
   smoothStream,
@@ -12,6 +15,7 @@ import {
   MAX_OUTPUT_TOKENS,
   MAX_ROUND_TRIPS,
 } from "../../lib/limits";
+import type { ErrorCode } from "../../lib/errors";
 
 export const maxDuration = 30;
 
@@ -43,6 +47,33 @@ function takeRecentRoundTrips(messages: UIMessage[]): UIMessage[] {
   return messages.slice(start);
 }
 
+// 返答の途中で起きたエラーを、種類(コード)に分類する。
+// 詳しい内容はサーバーのログにだけ残し、画面にはコードだけを返す。
+function classifyError(error: unknown): ErrorCode {
+  console.error("[api/chat] error:", error);
+
+  // 自動の再試行を使い切ったときは、最後のエラーを調べる
+  const e = RetryError.isInstance(error) ? error.lastError : error;
+
+  // APIキーが設定されていない
+  if (LoadAPIKeyError.isInstance(e)) return "auth";
+
+  if (APICallError.isInstance(e)) {
+    const status = e.statusCode;
+    // APIキーが無効、または権限がない
+    if (status === 401 || status === 403) return "auth";
+    // 利用枠(クレジット)の残りがない
+    if (status === 400 && /credit balance/i.test(e.message)) return "billing";
+    // 短時間にリクエストが多すぎる
+    if (status === 429) return "rate_limit";
+    // Anthropic側が混み合っている(529)、または障害(5xx)
+    if (status !== undefined && (status === 529 || status >= 500)) {
+      return "overloaded";
+    }
+  }
+  return "unknown";
+}
+
 export async function POST(req: Request) {
   const { messages }: { messages: UIMessage[] } = await req.json();
 
@@ -67,6 +98,9 @@ export async function POST(req: Request) {
   });
 
   return createUIMessageStreamResponse({
-    stream: toUIMessageStream({ stream: result.stream }),
+    stream: toUIMessageStream({
+      stream: result.stream,
+      onError: classifyError,
+    }),
   });
 }

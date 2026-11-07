@@ -3,6 +3,7 @@
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { useEffect, useRef, useState } from "react";
+import { toErrorMessage } from "../lib/errors";
 import { MAX_INPUT_CHARS, MAX_ROUND_TRIPS } from "../lib/limits";
 
 // 入力欄の高さの下限・上限(px)。60pxは約2行分、300pxは約12行分
@@ -35,10 +36,15 @@ function UserAvatar() {
 }
 
 export default function Chat() {
-  const { messages, setMessages, sendMessage, status, stop } = useChat({
-    transport: new DefaultChatTransport({ api: "/api/chat" }),
-  });
+  const { messages, setMessages, sendMessage, status, stop, error, clearError } =
+    useChat({
+      transport: new DefaultChatTransport({ api: "/api/chat" }),
+    });
   const [input, setInput] = useState("");
+  // 停止ボタンで止めた返答のid(「（停止しました）」を表示するために覚えておく)
+  const [stoppedIds, setStoppedIds] = useState<string[]>([]);
+  // 返答が始まる前に止めた場合は、返答のメッセージがまだないため、別に覚えておく
+  const [stoppedBeforeReply, setStoppedBeforeReply] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const [inputHeight, setInputHeight] = useState(MIN_INPUT_HEIGHT);
   const dragRef = useRef<{ startY: number; startHeight: number } | null>(null);
@@ -59,8 +65,29 @@ export default function Chat() {
   function submit() {
     const text = input.trim();
     if (!text || isBusy || input.length > MAX_INPUT_CHARS) return;
+    clearError();
+    setStoppedBeforeReply(false);
     sendMessage({ text });
     setInput("");
+  }
+
+  // 停止ボタン: 返答を止めて、どこで止めたかを覚える
+  function handleStop() {
+    const last = messages[messages.length - 1];
+    if (status === "streaming" && last?.role === "assistant") {
+      setStoppedIds((ids) => [...ids, last.id]);
+    } else {
+      setStoppedBeforeReply(true);
+    }
+    stop();
+  }
+
+  // 新しい会話: 画面の履歴とエラー、停止の記録をすべて消す
+  function handleNewChat() {
+    setMessages([]);
+    setStoppedIds([]);
+    setStoppedBeforeReply(false);
+    clearError();
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -122,6 +149,11 @@ export default function Chat() {
                       <span key={index}>{part.text}</span>
                     ) : null,
                   )}
+                  {stoppedIds.includes(message.id) && (
+                    <span className="mt-1 block text-xs text-gray-500">
+                      （停止しました）
+                    </span>
+                  )}
                 </div>
               </div>
             );
@@ -135,8 +167,20 @@ export default function Chat() {
               </div>
             </div>
           )}
+          {stoppedBeforeReply && (
+            <p className="text-center text-xs text-gray-500">（停止しました）</p>
+          )}
           <div ref={bottomRef} />
         </div>
+
+        {error && (
+          <div
+            role="alert"
+            className="mx-4 mb-1 rounded-xl bg-red-50 px-4 py-2 text-sm text-red-700 sm:mx-6"
+          >
+            {toErrorMessage(error)}
+          </div>
+        )}
 
         {isHistoryTrimmed && (
           <div className="mx-4 mb-1 flex items-center justify-between gap-3 rounded-xl bg-amber-50 px-4 py-2 text-xs text-amber-800 sm:mx-6">
@@ -145,7 +189,7 @@ export default function Chat() {
             </span>
             <button
               type="button"
-              onClick={() => setMessages([])}
+              onClick={handleNewChat}
               disabled={isBusy}
               className="shrink-0 rounded-lg bg-amber-100 px-3 py-1 font-medium transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -182,7 +226,7 @@ export default function Chat() {
             {isBusy ? (
               <button
                 type="button"
-                onClick={() => stop()}
+                onClick={handleStop}
                 aria-label="停止"
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-800 text-white transition hover:bg-gray-700"
               >
