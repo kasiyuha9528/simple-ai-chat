@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "AIチャット",
-  description: "Claudと会話できるシンプルなAIチャット",
+  description: "Claudeと会話できるシンプルなAIチャット",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
