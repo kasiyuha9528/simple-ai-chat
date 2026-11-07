@@ -3,6 +3,7 @@
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { useEffect, useRef, useState } from "react";
+import { MAX_INPUT_CHARS, MAX_ROUND_TRIPS } from "../lib/limits";
 
 // 入力欄の高さの下限・上限(px)。60pxは約2行分、300pxは約12行分
 const MIN_INPUT_HEIGHT = 60;
@@ -34,7 +35,7 @@ function UserAvatar() {
 }
 
 export default function Chat() {
-  const { messages, sendMessage, status, stop } = useChat({
+  const { messages, setMessages, sendMessage, status, stop } = useChat({
     transport: new DefaultChatTransport({ api: "/api/chat" }),
   });
   const [input, setInput] = useState("");
@@ -43,7 +44,11 @@ export default function Chat() {
   const dragRef = useRef<{ startY: number; startHeight: number } | null>(null);
 
   const isBusy = status === "submitted" || status === "streaming";
-  const canSend = input.trim().length > 0;
+  const isOverLimit = input.length > MAX_INPUT_CHARS;
+  const canSend = input.trim().length > 0 && !isOverLimit;
+  // ユーザーの発言の数 = 往復の数。上限を超えると、古い会話はClaudeに送られない
+  const roundTrips = messages.filter((m) => m.role === "user").length;
+  const isHistoryTrimmed = roundTrips > MAX_ROUND_TRIPS;
 
   // メッセージが増える・文字が追加されるたびに、一番下までスクロールする
   useEffect(() => {
@@ -53,7 +58,7 @@ export default function Chat() {
   // 送信の処理(ボタンとEnterキーの両方から使う)
   function submit() {
     const text = input.trim();
-    if (!text || isBusy) return;
+    if (!text || isBusy || input.length > MAX_INPUT_CHARS) return;
     sendMessage({ text });
     setInput("");
   }
@@ -133,6 +138,22 @@ export default function Chat() {
           <div ref={bottomRef} />
         </div>
 
+        {isHistoryTrimmed && (
+          <div className="mx-4 mb-1 flex items-center justify-between gap-3 rounded-xl bg-amber-50 px-4 py-2 text-xs text-amber-800 sm:mx-6">
+            <span>
+              会話が長くなったため、古いやりとりは参照されません(直近{MAX_ROUND_TRIPS}往復のみ)。
+            </span>
+            <button
+              type="button"
+              onClick={() => setMessages([])}
+              disabled={isBusy}
+              className="shrink-0 rounded-lg bg-amber-100 px-3 py-1 font-medium transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              新しい会話
+            </button>
+          </div>
+        )}
+
         <div className="px-4 pb-4 sm:px-6">
           <div
             onPointerDown={handleResizeStart}
@@ -195,9 +216,13 @@ export default function Chat() {
               </button>
             )}
           </form>
-          <p className="mt-2 px-1 text-xs text-gray-500">
-            Enterで送信 / Shift+Enterで改行
-          </p>
+          <div className="mt-2 flex items-center justify-between px-1 text-xs text-gray-500">
+            <span>Enterで送信 / Shift+Enterで改行</span>
+            <span className={isOverLimit ? "font-medium text-red-600" : ""}>
+              {input.length.toLocaleString()} / {MAX_INPUT_CHARS.toLocaleString()}
+              {isOverLimit && "(文字数が多すぎます)"}
+            </span>
+          </div>
         </div>
       </div>
     </div>
