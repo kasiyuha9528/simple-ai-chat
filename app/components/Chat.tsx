@@ -1,7 +1,7 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
+import { DefaultChatTransport, type UIMessage } from "ai";
 import { useEffect, useRef, useState } from "react";
 import { toErrorMessage } from "../lib/errors";
 import { MAX_INPUT_CHARS, MAX_ROUND_TRIPS } from "../lib/limits";
@@ -9,6 +9,48 @@ import { MAX_INPUT_CHARS, MAX_ROUND_TRIPS } from "../lib/limits";
 // 入力欄の高さの下限・上限(px)。60pxは約2行分、300pxは約12行分
 const MIN_INPUT_HEIGHT = 60;
 const MAX_INPUT_HEIGHT = 300;
+
+// メッセージの文章部分だけを取り出す(コピーする内容)
+function getMessageText(message: UIMessage): string {
+  return message.parts
+    .map((part) => (part.type === "text" ? part.text : ""))
+    .join("");
+}
+
+function CopyIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-3.5 w-3.5"
+      aria-hidden="true"
+    >
+      <rect x="9" y="9" width="11" height="11" rx="2" />
+      <path d="M5 15V6a2 2 0 0 1 2-2h9" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-3.5 w-3.5"
+      aria-hidden="true"
+    >
+      <path d="M5 12l5 5L20 7" />
+    </svg>
+  );
+}
 
 function AiAvatar() {
   return (
@@ -45,6 +87,11 @@ export default function Chat() {
   const [stoppedIds, setStoppedIds] = useState<string[]>([]);
   // 返答が始まる前に止めた場合は、返答のメッセージがまだないため、別に覚えておく
   const [stoppedBeforeReply, setStoppedBeforeReply] = useState(false);
+  // コピーの結果(どの返答を、成功したか失敗したか)。2秒後に消える
+  const [copyResult, setCopyResult] = useState<{ id: string; ok: boolean } | null>(
+    null,
+  );
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const [inputHeight, setInputHeight] = useState(MIN_INPUT_HEIGHT);
   const dragRef = useRef<{ startY: number; startHeight: number } | null>(null);
@@ -60,6 +107,26 @@ export default function Chat() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "auto" });
   }, [messages, status]);
+
+  // 画面を閉じるときに、コピー表示を消すタイマーも止める
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
+
+  // 返答をクリップボードにコピーする
+  async function handleCopy(message: UIMessage) {
+    let ok = true;
+    try {
+      await navigator.clipboard.writeText(getMessageText(message));
+    } catch {
+      ok = false;
+    }
+    setCopyResult({ id: message.id, ok });
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = setTimeout(() => setCopyResult(null), 2000);
+  }
 
   // 送信の処理(ボタンとEnterキーの両方から使う)
   function submit() {
@@ -133,6 +200,13 @@ export default function Chat() {
         <div className="flex-1 space-y-5 overflow-y-auto px-4 py-4 sm:px-6">
           {messages.map((message) => {
             const isUser = message.role === "user";
+            // コピーできるのは、文章がある返答で、いま流れている最中ではないもの
+            const isStreamingThis =
+              status === "streaming" &&
+              message.id === messages[messages.length - 1]?.id;
+            const canCopy =
+              !isUser && !isStreamingThis && getMessageText(message).length > 0;
+            const result = copyResult?.id === message.id ? copyResult : null;
             return (
               <div
                 key={message.id}
@@ -140,19 +214,44 @@ export default function Chat() {
               >
                 {isUser ? <UserAvatar /> : <AiAvatar />}
                 <div
-                  className={`max-w-[75%] whitespace-pre-wrap break-words rounded-2xl px-4 py-2.5 leading-relaxed ${
-                    isUser ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-900"
+                  className={`flex max-w-[75%] flex-col gap-1 ${
+                    isUser ? "items-end" : "items-start"
                   }`}
                 >
-                  {message.parts.map((part, index) =>
-                    part.type === "text" ? (
-                      <span key={index}>{part.text}</span>
-                    ) : null,
-                  )}
-                  {stoppedIds.includes(message.id) && (
-                    <span className="mt-1 block text-xs text-gray-500">
-                      （停止しました）
-                    </span>
+                  <div
+                    className={`whitespace-pre-wrap break-words rounded-2xl px-4 py-2.5 leading-relaxed ${
+                      isUser ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-900"
+                    }`}
+                  >
+                    {message.parts.map((part, index) =>
+                      part.type === "text" ? (
+                        <span key={index}>{part.text}</span>
+                      ) : null,
+                    )}
+                    {stoppedIds.includes(message.id) && (
+                      <span className="mt-1 block text-xs text-gray-500">
+                        （停止しました）
+                      </span>
+                    )}
+                  </div>
+                  {canCopy && (
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(message)}
+                      aria-label="回答をコピー"
+                      className={`flex items-center gap-1 rounded-lg px-2 py-1 text-xs transition hover:bg-gray-100 ${
+                        result && !result.ok
+                          ? "text-red-600"
+                          : "text-gray-500 hover:text-gray-700"
+                      }`}
+                    >
+                      {result?.ok ? <CheckIcon /> : <CopyIcon />}
+                      {result
+                        ? result.ok
+                          ? "コピーしました"
+                          : "コピーできませんでした"
+                        : "コピー"}
+                    </button>
                   )}
                 </div>
               </div>
